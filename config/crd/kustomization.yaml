@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/n8n.slys.dev_n8ns.yaml
+- bases/n8n.slys.dev_n8nworkflows.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

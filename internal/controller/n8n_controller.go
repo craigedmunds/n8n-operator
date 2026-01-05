@@ -56,8 +56,9 @@ func (r *N8nReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if n8n.Status.Conditions == nil || len(n8n.Status.Conditions) == 0 {
 		if err = r.updateStatus(ctx, n8n, typeAvailableN8n, metav1.ConditionUnknown, "Reconciling", "Starting reconciliation"); err != nil {
 			log.Error(err, "Failed to update n8n status")
-			return ctrl.Result{}, err
+			return ctrl.Result{Requeue: true}, nil // Requeue instead of failing
 		}
+		// Re-fetch after status update
 		if err := r.Get(ctx, req.NamespacedName, n8n); err != nil {
 			log.Error(err, "Failed to re-fetch n8n")
 			return ctrl.Result{}, err
@@ -73,8 +74,11 @@ func (r *N8nReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 		if err = r.Update(ctx, n8n); err != nil {
 			log.Error(err, "Failed to update custom resource to add finalizer")
-			return ctrl.Result{}, err
+			return ctrl.Result{Requeue: true}, nil // Requeue instead of failing
 		}
+		// Return early to let the next reconciliation handle the rest
+		// This avoids conflicts from trying to do too much in one reconciliation
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Handle deletion

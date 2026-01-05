@@ -134,6 +134,18 @@ lint: golangci-lint ## Run golangci-lint linter
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+.PHONY: dev-image-build
+dev-image-build: ## Build developer Docker image with all testing tools.
+	$(CONTAINER_TOOL) build -f Dockerfile.dev -t n8n-operator:dev .
+
+.PHONY: dev-image-test
+dev-image-test: dev-image-build manifests generate ## Run tests using developer Docker image.
+	$(CONTAINER_TOOL) run --rm -v "$(PWD):/workspace" -w /workspace n8n-operator:dev sh -c "go mod download && make test"
+
+.PHONY: dev-image-shell
+dev-image-shell: dev-image-build ## Open a shell in the developer Docker image.
+	$(CONTAINER_TOOL) run --rm -it -v "$(PWD):/workspace" -w /workspace n8n-operator:dev bash
+
 ##@ Build
 
 .PHONY: build

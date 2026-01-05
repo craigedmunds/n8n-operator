@@ -25,8 +25,11 @@ func (r *N8nReconciler) reconcileResource(ctx context.Context, n8n *n8nv1alpha1.
 			return fmt.Errorf("failed to create resource: %w", err)
 		}
 		return nil
+	} else if err != nil {
+		return err
 	}
-	return err
+	// Resource exists, no need to create it
+	return nil
 }
 
 // updateStatus handles updating the status conditions of the N8n resource
@@ -38,6 +41,60 @@ func (r *N8nReconciler) updateStatus(ctx context.Context, n8n *n8nv1alpha1.N8n, 
 		Message: message,
 	})
 	return r.Status().Update(ctx, n8n)
+}
+
+// setStatusCondition sets a status condition without updating the resource
+func (r *N8nReconciler) setStatusCondition(n8n *n8nv1alpha1.N8n, conditionType string, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&n8n.Status.Conditions, metav1.Condition{
+		Type:    conditionType,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
+	})
+}
+
+// updateResourceWithRetry updates the resource with retry logic for optimistic concurrency
+func (r *N8nReconciler) updateResourceWithRetry(ctx context.Context, n8n *n8nv1alpha1.N8n) error {
+	const maxRetries = 3
+	for i := 0; i < maxRetries; i++ {
+		// Try to update the resource spec/metadata first
+		if err := r.Update(ctx, n8n); err != nil {
+			if apierrors.IsConflict(err) && i < maxRetries-1 {
+				// Resource was modified, re-fetch and retry
+				fresh := &n8nv1alpha1.N8n{}
+				if fetchErr := r.Get(ctx, client.ObjectKeyFromObject(n8n), fresh); fetchErr != nil {
+					return fetchErr
+				}
+				// Copy our changes to the fresh resource
+				fresh.Status = n8n.Status
+				fresh.Finalizers = n8n.Finalizers
+				*n8n = *fresh
+				continue
+			}
+			return err
+		}
+		break // Success, exit retry loop
+	}
+	
+	// Now update the status separately
+	for i := 0; i < maxRetries; i++ {
+		if err := r.Status().Update(ctx, n8n); err != nil {
+			if apierrors.IsConflict(err) && i < maxRetries-1 {
+				// Resource was modified, re-fetch and retry
+				fresh := &n8nv1alpha1.N8n{}
+				if fetchErr := r.Get(ctx, client.ObjectKeyFromObject(n8n), fresh); fetchErr != nil {
+					return fetchErr
+				}
+				// Copy our status changes to the fresh resource
+				fresh.Status = n8n.Status
+				*n8n = *fresh
+				continue
+			}
+			return err
+		}
+		return nil // Success
+	}
+	return fmt.Errorf("failed to update resource status after %d retries", maxRetries)
 }
 
 // handleResourceError updates the status condition when an error occurs

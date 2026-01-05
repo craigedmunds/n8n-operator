@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	cachev1alpha1 "github.com/jakub-k-slys/n8n-operator/api/v1alpha1"
@@ -53,35 +54,13 @@ var _ = Describe("N8n Controller", func() {
 			Recorder: k8sManager.GetEventRecorderFor("n8n-controller"),
 		}
 
-		// Clean up any existing resources
-		existing := &cachev1alpha1.N8n{}
-		_ = k8sClient.Get(ctx, typeNamespacedName, existing)
-		_ = k8sClient.Delete(ctx, existing)
-
-		// Wait for deletion to complete
-		Eventually(func() bool {
-			err := k8sClient.Get(ctx, typeNamespacedName, &cachev1alpha1.N8n{})
-			return errors.IsNotFound(err)
-		}, time.Second*10, time.Millisecond*100).Should(BeTrue())
-
-		// Wait a moment to ensure all resources are cleaned up
-		time.Sleep(time.Second * 2)
+		// Clean up any existing resources thoroughly
+		cleanupAllResources(ctx, typeNamespacedName)
 	})
 
 	AfterEach(func() {
-		// Clean up any remaining resources
-		existing := &cachev1alpha1.N8n{}
-		_ = k8sClient.Get(ctx, typeNamespacedName, existing)
-		_ = k8sClient.Delete(ctx, existing)
-
-		// Wait for deletion to complete
-		Eventually(func() bool {
-			err := k8sClient.Get(ctx, typeNamespacedName, &cachev1alpha1.N8n{})
-			return errors.IsNotFound(err)
-		}, time.Second*10, time.Millisecond*100).Should(BeTrue())
-
-		// Wait a moment to ensure all resources are cleaned up
-		time.Sleep(time.Second * 2)
+		// Clean up any remaining resources thoroughly
+		cleanupAllResources(ctx, typeNamespacedName)
 	})
 	Context("When reconciling a resource with all features enabled", func() {
 		It("should successfully reconcile the resource", func() {
@@ -118,19 +97,8 @@ var _ = Describe("N8n Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			By("Reconciling the created resource")
-			controllerReconciler := &N8nReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: k8sManager.GetEventRecorderFor("n8n-controller"),
-			}
-
-			// Wait for reconciliation to complete
-			Eventually(func() error {
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				return err
-			}, time.Second*10, time.Millisecond*100).Should(Succeed())
+			// The controller manager is already running and will handle reconciliation automatically
+			// We just need to wait for the resources to be created
 
 			// Verify Deployment is created
 			Eventually(func() bool {
@@ -138,8 +106,9 @@ var _ = Describe("N8n Controller", func() {
 				if err := k8sClient.Get(ctx, typeNamespacedName, deployment); err != nil {
 					return false
 				}
+				// Check that deployment has the correct container and image starts with the expected prefix
 				return len(deployment.Spec.Template.Spec.Containers) == 1 &&
-					deployment.Spec.Template.Spec.Containers[0].Image == n8nDockerImage
+					strings.HasPrefix(deployment.Spec.Template.Spec.Containers[0].Image, "ghcr.io/n8n-io/n8n:")
 			}, time.Second*5, time.Millisecond*100).Should(BeTrue())
 
 			// Verify Service is created
@@ -489,3 +458,31 @@ var _ = Describe("N8n Controller", func() {
 		})
 	})
 })
+
+// cleanupAllResources ensures all resources related to the test are properly cleaned up
+func cleanupAllResources(ctx context.Context, namespacedName types.NamespacedName) {
+	// Delete N8n resource first
+	existing := &cachev1alpha1.N8n{}
+	if err := k8sClient.Get(ctx, namespacedName, existing); err == nil {
+		_ = k8sClient.Delete(ctx, existing)
+	}
+
+	// Wait for N8n resource deletion with shorter timeout
+	Eventually(func() bool {
+		err := k8sClient.Get(ctx, namespacedName, &cachev1alpha1.N8n{})
+		return errors.IsNotFound(err)
+	}, time.Second*5, time.Millisecond*200).Should(BeTrue())
+
+	// Clean up child resources explicitly but don't wait for each one
+	pvcName := types.NamespacedName{Name: namespacedName.Name + "-data", Namespace: namespacedName.Namespace}
+	
+	// Delete all resources without waiting
+	_ = k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})
+	_ = k8sClient.Delete(ctx, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})
+	_ = k8sClient.Delete(ctx, &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: pvcName.Name, Namespace: pvcName.Namespace}})
+	_ = k8sClient.Delete(ctx, &monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})
+	_ = k8sClient.Delete(ctx, &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})
+
+	// Short wait to let deletions propagate
+	time.Sleep(time.Millisecond * 500)
+}

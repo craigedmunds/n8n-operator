@@ -1,0 +1,47 @@
+apiVersion: n8n.slys.dev/v1alpha1
+kind: N8nWorkflow
+metadata:
+  name: n8nworkflow-sample
+spec:
+  n8nRef:
+    name: n8n-sample
+    namespace: default
+  workflow:
+    name: "Sample Scheduled HTTP Request"
+    active: true
+    tags: ["sample", "schedule", "http"]
+    nodes:
+    - id: "schedule-trigger"
+      name: "Schedule Trigger"
+      type: "n8n-nodes-base.scheduleTrigger"
+      typeVersion: "1.1"
+      position: ["240", "300"]
+      parameters:
+        rule:
+          interval:
+          - field: "minutes"
+            minutesInterval: 5
+    - id: "http-request"
+      name: "HTTP Request"
+      type: "n8n-nodes-base.httpRequest"
+      typeVersion: "4.1"
+      position: ["460", "300"]
+      parameters:
+        url: "https://httpbin.org/get"
+        method: "GET"
+        options:
+          timeout: 10000
+    connections:
+      schedule-trigger:
+        main:
+        - - node: "http-request"
+            type: "main"
+            index: 0
+    settings:
+      executionOrder: "v1"
+  credentials:
+  - name: "sample-api-key"
+    type: "httpHeaderAuth"
+    secretRef:
+      name: "sample-api-secret"
+      namespace: "default"

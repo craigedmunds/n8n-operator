@@ -1,0 +1,45 @@
+# Developer Docker image for n8n-operator with all testing tools
+FROM golang:1.24-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
+# Install kustomize
+RUN curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash \
+    && mv kustomize /usr/local/bin/
+
+# Install Go tools for development and testing
+RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.1 && \
+    go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19 && \
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1 && \
+    go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+# Set up envtest binaries directory
+RUN mkdir -p /usr/local/kubebuilder/bin
+
+# Pre-download envtest binaries for common versions and get the path
+RUN setup-envtest use 1.31.0 --bin-dir /usr/local/kubebuilder/bin && \
+    echo "KUBEBUILDER_ASSETS=$(setup-envtest use 1.31.0 --bin-dir /usr/local/kubebuilder/bin -p path)" > /etc/environment
+
+# Set environment variables - source the path from setup-envtest
+RUN echo 'export KUBEBUILDER_ASSETS=$(setup-envtest use 1.31.0 --bin-dir /usr/local/kubebuilder/bin -p path)' >> /root/.bashrc
+ENV PATH="${PATH}:/go/bin"
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy go.mod and go.sum first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Default command
+CMD ["bash"]
