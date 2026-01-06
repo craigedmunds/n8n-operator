@@ -40,6 +40,7 @@ rules:
   - ""
   resources:
   - pods
+  - secrets
   verbs:
   - get
   - list
@@ -73,6 +74,7 @@ rules:
   resources:
   - n8ns
   - n8ns/status
+  - n8nworkflows
   verbs:
   - create
   - delete
@@ -81,6 +83,20 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - n8n.slys.dev
+  resources:
+  - n8nworkflows/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - n8n.slys.dev
+  resources:
+  - n8nworkflows/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - networking.k8s.io
   resources:

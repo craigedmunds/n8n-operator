@@ -141,6 +141,19 @@ type N8nWorkflowStatus struct {
 	// LastSync is the timestamp of the last successful sync with n8n
 	// +kubebuilder:validation:Optional
 	LastSync *metav1.Time `json:"lastSync,omitempty"`
+	// SyncStatus indicates the current sync status with n8n
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=Synced;Syncing;Failed;Unknown
+	SyncStatus string `json:"syncStatus,omitempty"`
+	// ErrorMessage contains the last error message if sync failed
+	// +kubebuilder:validation:Optional
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	// CredentialsSynced indicates whether all required credentials have been synced
+	// +kubebuilder:validation:Optional
+	CredentialsSynced bool `json:"credentialsSynced,omitempty"`
+	// ObservedGeneration reflects the generation of the most recently observed N8nWorkflow
+	// +kubebuilder:validation:Optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Conditions represent the latest available observations of the workflow's state
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
@@ -151,6 +164,7 @@ type N8nWorkflowStatus struct {
 // +kubebuilder:resource:shortName=n8nwf
 // +kubebuilder:printcolumn:name="Workflow ID",type="string",JSONPath=".status.workflowId"
 // +kubebuilder:printcolumn:name="Active",type="boolean",JSONPath=".status.active"
+// +kubebuilder:printcolumn:name="Sync Status",type="string",JSONPath=".status.syncStatus"
 // +kubebuilder:printcolumn:name="N8n Instance",type="string",JSONPath=".spec.n8nRef.name"
 // +kubebuilder:printcolumn:name="Last Sync",type="date",JSONPath=".status.lastSync"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"

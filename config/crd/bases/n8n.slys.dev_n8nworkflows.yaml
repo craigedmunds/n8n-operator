@@ -23,6 +23,9 @@ spec:
     - jsonPath: .status.active
       name: Active
       type: boolean
+    - jsonPath: .status.syncStatus
+      name: Sync Status
+      type: string
     - jsonPath: .spec.n8nRef.name
       name: N8n Instance
       type: string
@@ -256,10 +259,31 @@ spec:
                   - type
                   type: object
                 type: array
+              credentialsSynced:
+                description: CredentialsSynced indicates whether all required credentials
+                  have been synced
+                type: boolean
+              errorMessage:
+                description: ErrorMessage contains the last error message if sync
+                  failed
+                type: string
               lastSync:
                 description: LastSync is the timestamp of the last successful sync
                   with n8n
                 format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed N8nWorkflow
+                format: int64
+                type: integer
+              syncStatus:
+                description: SyncStatus indicates the current sync status with n8n
+                enum:
+                - Synced
+                - Syncing
+                - Failed
+                - Unknown
                 type: string
               workflowId:
                 description: WorkflowID is the ID of the workflow in n8n
