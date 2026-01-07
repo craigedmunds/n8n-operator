@@ -1,0 +1,75 @@
+apiVersion: n8n.slys.dev/v1alpha1
+kind: N8nWorkflow
+metadata:
+  name: cross-namespace-example
+  namespace: workflows
+spec:
+  # Reference an N8n instance in a different namespace
+  n8nRef:
+    name: n8n-production
+    namespace: n8n-prod
+  workflow:
+    name: "Cross-Namespace Workflow"
+    active: true
+    tags: ["cross-namespace", "production", "example"]
+    nodes:
+    - id: "cron-trigger"
+      name: "Cron Trigger"
+      type: "n8n-nodes-base.scheduleTrigger"
+      typeVersion: "1.1"
+      position: ["240", "300"]
+      parameters:
+        rule:
+          interval:
+          - field: "cronExpression"
+            cronExpression: "0 0 * * *"  # Daily at midnight
+    - id: "http-request"
+      name: "HTTP Request"
+      type: "n8n-nodes-base.httpRequest"
+      typeVersion: "4.1"
+      position: ["460", "300"]
+      parameters:
+        url: "https://api.example.com/daily-report"
+        method: "GET"
+        authentication: "headerAuth"
+        options:
+          timeout: 30000
+      credentials:
+        httpHeaderAuth: "prod-api-key"
+    - id: "process-report"
+      name: "Process Report"
+      type: "n8n-nodes-base.code"
+      typeVersion: "1.0"
+      position: ["680", "300"]
+      parameters:
+        mode: "runOnceForAllItems"
+        jsCode: |
+          // Process the daily report data
+          const items = $input.all();
+          const processed = items.map(item => ({
+            ...item.json,
+            processed_at: new Date().toISOString(),
+            status: 'completed'
+          }));
+          return processed;
+    connections:
+      cron-trigger:
+        main:
+        - - node: "http-request"
+            type: "main"
+            index: 0
+      http-request:
+        main:
+        - - node: "process-report"
+            type: "main"
+            index: 0
+    settings:
+      executionOrder: "v1"
+      saveExecutionProgress: true
+      saveManualExecutions: true
+  credentials:
+  - name: "prod-api-key"
+    type: "httpHeaderAuth"
+    secretRef:
+      name: "production-api-credentials"
+      namespace: "workflows"  # Secret in the same namespace as the workflow

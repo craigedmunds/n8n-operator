@@ -10,6 +10,7 @@ import (
 	n8nv1alpha1 "github.com/jakub-k-slys/n8n-operator/api/v1alpha1"
 	"github.com/jakub-k-slys/n8n-operator/internal/credentialmanager"
 	"github.com/jakub-k-slys/n8n-operator/internal/n8nclient"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -189,6 +190,7 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			SyncStatus:        syncStatusFailed,
 			ErrorMessage:      err.Error(),
 			CredentialsSynced: &credentialsSynced,
+			CredentialIDs:     credentialIDs,
 			ConditionType:     typeDegradedN8nWorkflow,
 			ConditionStatus:   metav1.ConditionTrue,
 			Reason:            "WorkflowSyncFailed",
@@ -214,6 +216,7 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			SyncStatus:        syncStatusSynced,
 			ErrorMessage:      fmt.Sprintf("Verification failed: %v", err),
 			CredentialsSynced: &credentialsSynced,
+			CredentialIDs:     credentialIDs,
 			WorkflowID:        workflowID,
 			Active:            &active,
 			ConditionType:     typeAvailableN8nWorkflow,
@@ -239,6 +242,7 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			SyncStatus:        syncStatusSynced,
 			ErrorMessage:      "", // Clear any previous error
 			CredentialsSynced: &credentialsSynced,
+			CredentialIDs:     credentialIDs,
 			WorkflowID:        workflowID,
 			Active:            &actualActive,
 			ConditionType:     typeAvailableN8nWorkflow,
@@ -303,26 +307,50 @@ func (r *N8nWorkflowReconciler) handleDeletion(ctx context.Context, workflow *n8
 func (r *N8nWorkflowReconciler) doFinalizerOperationsForN8nWorkflow(ctx context.Context, workflow *n8nv1alpha1.N8nWorkflow) error {
 	logger := log.FromContext(ctx)
 
-	// If we have a workflow ID, try to delete it from n8n
+	// Get n8n instance to create client (needed for both workflow and credential deletion)
+	n8nInstance, err := r.Validator.ValidateN8nInstanceReference(ctx, workflow)
+	if err != nil {
+		logger.Info("N8n instance not found during cleanup, skipping deletion", "error", err)
+		r.Recorder.Event(workflow, "Warning", "CleanupSkipped",
+			fmt.Sprintf("N8n instance not found during cleanup: %v", err))
+		return nil // Don't fail cleanup if n8n instance is gone
+	}
+
+	n8nClient, err := r.createN8nClient(ctx, n8nInstance)
+	if err != nil {
+		logger.Info("Failed to create n8n client during cleanup, skipping deletion", "error", err)
+		r.Recorder.Event(workflow, "Warning", "CleanupSkipped",
+			fmt.Sprintf("Failed to create n8n client during cleanup: %v", err))
+		return nil // Don't fail cleanup if we can't connect to n8n
+	}
+
+	// Delete credentials from n8n
+	if workflow.Status.CredentialIDs != nil && len(workflow.Status.CredentialIDs) > 0 {
+		logger.Info("Deleting credentials from n8n", "count", len(workflow.Status.CredentialIDs))
+		for credName, credID := range workflow.Status.CredentialIDs {
+			err := n8nClient.DeleteCredential(ctx, credID)
+			if err != nil {
+				// Check if it's a "not found" error, which is acceptable during cleanup
+				if apiErr, ok := err.(*n8nclient.APIError); ok && apiErr.IsNotFound() {
+					logger.Info("Credential already deleted from n8n", "name", credName, "credentialID", credID)
+					r.Recorder.Event(workflow, "Normal", "CredentialAlreadyDeleted",
+						fmt.Sprintf("Credential %s (%s) was already deleted from n8n", credName, credID))
+				} else {
+					logger.Error(err, "Failed to delete credential from n8n during cleanup", "name", credName, "credentialID", credID)
+					r.Recorder.Event(workflow, "Warning", "CredentialDeletionFailed",
+						fmt.Sprintf("Failed to delete credential %s (%s) from n8n: %v", credName, credID, err))
+					// Continue with other credentials even if one fails
+				}
+			} else {
+				logger.Info("Successfully deleted credential from n8n", "name", credName, "credentialID", credID)
+				r.Recorder.Event(workflow, "Normal", "CredentialDeleted",
+					fmt.Sprintf("Successfully deleted credential %s (%s) from n8n", credName, credID))
+			}
+		}
+	}
+
+	// Delete workflow from n8n
 	if workflow.Status.WorkflowID != "" {
-		// Get n8n instance to create client
-		n8nInstance, err := r.Validator.ValidateN8nInstanceReference(ctx, workflow)
-		if err != nil {
-			logger.Info("N8n instance not found during cleanup, skipping workflow deletion", "error", err)
-			r.Recorder.Event(workflow, "Warning", "CleanupSkipped",
-				fmt.Sprintf("N8n instance not found during cleanup: %v", err))
-			return nil // Don't fail cleanup if n8n instance is gone
-		}
-
-		n8nClient, err := r.createN8nClient(ctx, n8nInstance)
-		if err != nil {
-			logger.Info("Failed to create n8n client during cleanup, skipping workflow deletion", "error", err)
-			r.Recorder.Event(workflow, "Warning", "CleanupSkipped",
-				fmt.Sprintf("Failed to create n8n client during cleanup: %v", err))
-			return nil // Don't fail cleanup if we can't connect to n8n
-		}
-
-		// Delete workflow from n8n with enhanced error handling
 		err = n8nClient.DeleteWorkflow(ctx, workflow.Status.WorkflowID)
 		if err != nil {
 			// Check if it's a "not found" error, which is acceptable during cleanup
@@ -361,16 +389,48 @@ func (r *N8nWorkflowReconciler) doFinalizerOperationsForN8nWorkflow(ctx context.
 
 // createN8nClient creates an n8n API client for the given n8n instance
 func (r *N8nWorkflowReconciler) createN8nClient(ctx context.Context, n8nInstance *n8nv1alpha1.N8n) (*n8nclient.Client, error) {
-	// For now, we'll use a placeholder implementation
-	// In a real implementation, we would:
-	// 1. Get the n8n service URL from the instance
-	// 2. Get API credentials from secrets
-	// 3. Create and return the client
+	logger := log.FromContext(ctx)
 	
-	// This is a simplified implementation for the controller structure
+	// Get the API credentials secret name from the N8n instance status
+	if n8nInstance.Status.APICredentialsSecretName == "" {
+		return nil, fmt.Errorf("n8n instance %s/%s does not have API credentials secret configured", 
+			n8nInstance.Namespace, n8nInstance.Name)
+	}
+	
+	// Retrieve the API credentials secret
+	secretName := n8nInstance.Status.APICredentialsSecretName
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      secretName,
+		Namespace: n8nInstance.Namespace,
+	}, secret)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("API credentials secret %s not found in namespace %s", 
+				secretName, n8nInstance.Namespace)
+		}
+		return nil, fmt.Errorf("failed to retrieve API credentials secret: %w", err)
+	}
+	
+	// Extract the API key from the secret
+	apiKeyBytes, ok := secret.Data["apiKey"]
+	if !ok {
+		return nil, fmt.Errorf("API credentials secret %s does not contain 'apiKey' field", secretName)
+	}
+	apiKey := string(apiKeyBytes)
+	
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key in secret %s is empty", secretName)
+	}
+	
+	// Construct the base URL for the n8n instance
 	// Use port 80 which is the standard HTTP port exposed by the n8n service
 	baseURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", n8nInstance.Name, n8nInstance.Namespace)
-	apiKey := "placeholder-api-key" // TODO: Get from secret
+	
+	logger.Info("Creating n8n client", 
+		"baseURL", baseURL, 
+		"secretName", secretName,
+		"namespace", n8nInstance.Namespace)
 	
 	return n8nclient.NewClient(baseURL, apiKey)
 }
@@ -380,10 +440,16 @@ func (r *N8nWorkflowReconciler) syncWorkflow(ctx context.Context, workflow *n8nv
 	logger := log.FromContext(ctx)
 
 	// Convert the workflow definition to n8n format
-	workflowDef, err := r.convertWorkflowDefinition(workflow, credentialIDs)
+	workflowDef, err := r.ConvertWorkflowDefinition(workflow, credentialIDs)
 	if err != nil {
 		return "", fmt.Errorf("failed to convert workflow definition: %w", err)
 	}
+
+	// Log the workflow definition for debugging
+	logger.Info("Converted workflow definition", 
+		"nodeCount", len(workflowDef.Nodes),
+		"hasConnections", workflowDef.Connections != nil,
+		"hasSettings", workflowDef.Settings != nil)
 
 	var workflowID string
 	var response *n8nclient.WorkflowResponse
@@ -657,10 +723,15 @@ func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
-// convertWorkflowDefinition converts the Kubernetes workflow definition to n8n format
-func (r *N8nWorkflowReconciler) convertWorkflowDefinition(workflow *n8nv1alpha1.N8nWorkflow, credentialIDs map[string]string) (*n8nclient.WorkflowDefinition, error) {
+// ConvertWorkflowDefinition converts the Kubernetes workflow definition to n8n format
+// Exported for testing purposes
+func (r *N8nWorkflowReconciler) ConvertWorkflowDefinition(workflow *n8nv1alpha1.N8nWorkflow, credentialIDs map[string]string) (*n8nclient.WorkflowDefinition, error) {
+	logger := log.Log.WithName("convertWorkflowDefinition")
+	
 	// Convert nodes
 	nodes := make([]interface{}, len(workflow.Spec.Workflow.Nodes))
+	logger.Info("Converting workflow nodes", "nodeCount", len(workflow.Spec.Workflow.Nodes))
+	
 	for i, node := range workflow.Spec.Workflow.Nodes {
 		nodeMap := map[string]interface{}{
 			"id":   node.ID,
@@ -668,7 +739,7 @@ func (r *N8nWorkflowReconciler) convertWorkflowDefinition(workflow *n8nv1alpha1.
 			"type": node.Type,
 		}
 
-		if node.TypeVersion != "" {
+		if node.TypeVersion != 0 {
 			nodeMap["typeVersion"] = node.TypeVersion
 		}
 
@@ -702,7 +773,10 @@ func (r *N8nWorkflowReconciler) convertWorkflowDefinition(workflow *n8nv1alpha1.
 		}
 
 		nodes[i] = nodeMap
+		logger.V(1).Info("Converted node", "index", i, "id", node.ID, "name", node.Name)
 	}
+
+	logger.Info("Converted all nodes", "totalNodes", len(nodes))
 
 	// Convert connections
 	var connections map[string]interface{}
@@ -710,6 +784,7 @@ func (r *N8nWorkflowReconciler) convertWorkflowDefinition(workflow *n8nv1alpha1.
 		if err := json.Unmarshal(workflow.Spec.Workflow.Connections.Raw, &connections); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal workflow connections: %w", err)
 		}
+		logger.Info("Converted connections", "connectionCount", len(connections))
 	}
 
 	// Convert settings
@@ -718,16 +793,25 @@ func (r *N8nWorkflowReconciler) convertWorkflowDefinition(workflow *n8nv1alpha1.
 		if err := json.Unmarshal(workflow.Spec.Workflow.Settings.Raw, &settings); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal workflow settings: %w", err)
 		}
+		logger.Info("Converted settings", "settingCount", len(settings))
 	}
 
-	return &n8nclient.WorkflowDefinition{
+	result := &n8nclient.WorkflowDefinition{
 		Name:        workflow.Spec.Workflow.Name,
 		Active:      workflow.Spec.Workflow.Active,
 		Tags:        workflow.Spec.Workflow.Tags,
 		Nodes:       nodes,
 		Connections: connections,
 		Settings:    settings,
-	}, nil
+	}
+	
+	logger.Info("Workflow definition converted", 
+		"name", result.Name,
+		"nodeCount", len(result.Nodes),
+		"hasConnections", result.Connections != nil,
+		"hasSettings", result.Settings != nil)
+	
+	return result, nil
 }
 
 // updateStatus updates the status of the N8nWorkflow resource
@@ -774,6 +858,11 @@ func (r *N8nWorkflowReconciler) updateComprehensiveStatus(ctx context.Context, w
 	// Update credentials synced status
 	if update.CredentialsSynced != nil {
 		workflow.Status.CredentialsSynced = *update.CredentialsSynced
+	}
+
+	// Update credential IDs if provided
+	if update.CredentialIDs != nil {
+		workflow.Status.CredentialIDs = update.CredentialIDs
 	}
 
 	// Update workflow ID if provided
@@ -825,6 +914,7 @@ type StatusUpdate struct {
 	SyncStatus         string
 	ErrorMessage       string
 	CredentialsSynced  *bool
+	CredentialIDs      map[string]string
 	WorkflowID         string
 	Active             *bool
 	ConditionType      string

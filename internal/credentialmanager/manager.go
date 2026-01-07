@@ -47,8 +47,21 @@ func (m *Manager) ProcessCredentials(ctx context.Context, workflow *v1alpha1.N8n
 	logger := log.FromContext(ctx)
 	credentialIDs := make(map[string]string)
 	
+	// Start with existing credential IDs from status
+	if workflow.Status.CredentialIDs != nil {
+		for name, id := range workflow.Status.CredentialIDs {
+			credentialIDs[name] = id
+		}
+	}
+	
 	for _, credSpec := range workflow.Spec.Credentials {
 		logger.Info("Processing credential", "name", credSpec.Name, "type", credSpec.Type)
+		
+		// Check if credential already exists in status
+		if existingID, exists := credentialIDs[credSpec.Name]; exists {
+			logger.Info("Credential already exists, skipping creation", "name", credSpec.Name, "id", existingID)
+			continue
+		}
 		
 		// Get secret data from Kubernetes
 		secretData, err := m.GetSecretData(ctx, credSpec.SecretRef, workflow.Namespace)

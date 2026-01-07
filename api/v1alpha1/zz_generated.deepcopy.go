@@ -385,6 +385,13 @@ func (in *N8nWorkflowStatus) DeepCopyInto(out *N8nWorkflowStatus) {
 		in, out := &in.LastSync, &out.LastSync
 		*out = (*in).DeepCopy()
 	}
+	if in.CredentialIDs != nil {
+		in, out := &in.CredentialIDs, &out.CredentialIDs
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))
@@ -491,7 +498,7 @@ func (in *WorkflowNode) DeepCopyInto(out *WorkflowNode) {
 	*out = *in
 	if in.Position != nil {
 		in, out := &in.Position, &out.Position
-		*out = make([]string, len(*in))
+		*out = make([]int, len(*in))
 		copy(*out, *in)
 	}
 	if in.Parameters != nil {

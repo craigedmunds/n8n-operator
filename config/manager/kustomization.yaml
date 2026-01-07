@@ -1,8 +1,19 @@
 resources:
 - manager.yaml
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 images:
 - name: controller
-  newName: ghcr.io/jakub-k-slys/n8n-operator
-  newTag: 0.0.1
+  newName: ghcr.io/craigedmunds/n8n-operator
+  newTag: 0.51.4-dev-20260106-160052
+
+patches:
+- patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --enable-prometheus=false
+  target:
+    kind: Deployment
+    name: controller-manager

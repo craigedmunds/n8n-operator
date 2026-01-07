@@ -21,6 +21,10 @@ func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployme
 	
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
+	var initContainers []corev1.Container
+
+	// Note: API credentials are now injected via environment variable (N8N_API_KEY)
+	// using valueFrom.secretKeyRef, so no volume mount is needed
 
 	if n8n.Spec.PersistentStorage != nil && n8n.Spec.PersistentStorage.Enable {
 		volumes = append(volumes, corev1.Volume{
@@ -39,6 +43,32 @@ func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployme
 		if err := r.createPVCIfNotExists(n8n); err != nil {
 			return nil, err
 		}
+		
+		// Add init container only when persistent storage is enabled
+		// Note: This requires privileged access to change ownership
+		initContainers = append(initContainers, corev1.Container{
+			Name:            "init-permissions",
+			Image:           "busybox",
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command: []string{
+				"sh",
+				"-c",
+				"chown -R 1000:1000 /home/node/.n8n",
+			},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser:                &[]int64{0}[0], // Run as root to change ownership
+				RunAsNonRoot:             &[]bool{false}[0],
+				AllowPrivilegeEscalation: &[]bool{false}[0],
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+					Add:  []corev1.Capability{"CHOWN", "FOWNER"},
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{{
+				Name:      "n8n-data",
+				MountPath: "/home/node/.n8n",
+			}},
+		})
 	}
 
 	dep := &appsv1.Deployment{
@@ -64,21 +94,7 @@ func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployme
 				Spec: corev1.PodSpec{
 					SecurityContext: getPodSecurityContext(),
 					Volumes:         volumes,
-					InitContainers: []corev1.Container{{
-						Name:            "init-permissions",
-						Image:           "busybox",
-						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command: []string{
-							"sh",
-							"-c",
-							"chown -R 1000:1000 /home/node/.n8n",
-						},
-						SecurityContext: &corev1.SecurityContext{
-							RunAsUser:    &[]int64{0}[0], // Run as root to change ownership
-							RunAsNonRoot: &[]bool{false}[0],
-						},
-						VolumeMounts: volumeMounts,
-					}},
+					InitContainers:  initContainers,
 					Containers: []corev1.Container{{
 						Image:           image,
 						Name:            "n8n",

@@ -27,6 +27,7 @@ rules:
   - ""
   resources:
   - persistentvolumeclaims
+  - secrets
   - services
   verbs:
   - create
@@ -40,7 +41,6 @@ rules:
   - ""
   resources:
   - pods
-  - secrets
   verbs:
   - get
   - list
@@ -49,18 +49,6 @@ rules:
   - gateway.networking.k8s.io
   resources:
   - httproutes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - monitoring.coreos.com
-  resources:
-  - servicemonitors
   verbs:
   - create
   - delete

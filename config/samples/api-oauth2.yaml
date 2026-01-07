@@ -1,0 +1,63 @@
+apiVersion: n8n.slys.dev/v1alpha1
+kind: N8nWorkflow
+metadata:
+  name: api-oauth2-example
+spec:
+  n8nRef:
+    name: n8n-sample
+    namespace: default
+  workflow:
+    name: "API Integration with OAuth2"
+    active: false  # Start inactive for manual testing
+    tags: ["api", "oauth2", "example"]
+    nodes:
+    - id: "manual-trigger"
+      name: "Manual Trigger"
+      type: "n8n-nodes-base.manualTrigger"
+      typeVersion: "1.0"
+      position: ["240", "300"]
+      parameters: {}
+    - id: "http-request-oauth"
+      name: "HTTP Request with OAuth2"
+      type: "n8n-nodes-base.httpRequest"
+      typeVersion: "4.1"
+      position: ["460", "300"]
+      parameters:
+        url: "https://api.example.com/data"
+        method: "GET"
+        authentication: "oAuth2"
+        options:
+          timeout: 10000
+      credentials:
+        oAuth2Api: "oauth2-api-cred"
+    - id: "process-data"
+      name: "Process Data"
+      type: "n8n-nodes-base.set"
+      typeVersion: "1.0"
+      position: ["680", "300"]
+      parameters:
+        values:
+          string:
+          - name: "status"
+            value: "processed"
+          - name: "timestamp"
+            value: "={{$now}}"
+    connections:
+      manual-trigger:
+        main:
+        - - node: "http-request-oauth"
+            type: "main"
+            index: 0
+      http-request-oauth:
+        main:
+        - - node: "process-data"
+            type: "main"
+            index: 0
+    settings:
+      executionOrder: "v1"
+  credentials:
+  - name: "oauth2-api-cred"
+    type: "oauth2"
+    secretRef:
+      name: "oauth2-credentials"
+      namespace: "default"

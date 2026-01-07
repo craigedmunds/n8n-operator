@@ -2,5 +2,9 @@
 resources:
 - v1alpha1_n8n.yaml
 - v1alpha1_n8nworkflow.yaml
+- webhook-basic-auth.yaml
+- api-oauth2.yaml
+- multi-credential.yaml
+- cross-namespace.yaml
 - sample-api-secret.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

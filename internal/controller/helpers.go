@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 
 	n8nv1alpha1 "github.com/jakub-k-slys/n8n-operator/api/v1alpha1"
@@ -73,6 +75,17 @@ func getN8nEnvVars(n8n *n8nv1alpha1.N8n) []corev1.EnvVar {
 			Name:  "N8N_TEMPLATES_ENABLED",
 			Value: "true",
 		},
+		{
+			Name: "N8N_API_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: getAPICredentialsSecretName(n8n.Name),
+					},
+					Key: "apiKey",
+				},
+			},
+		},
 	}
 
 	// Add hostname-related environment variables if hostname is configured
@@ -104,4 +117,27 @@ func getN8nEnvVars(n8n *n8nv1alpha1.N8n) []corev1.EnvVar {
 	})
 
 	return envVars
+}
+
+// generateAPIKey generates a random 32-character alphanumeric API key
+func generateAPIKey() (string, error) {
+	// Generate 24 random bytes (will become 32 characters when base64 encoded)
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	
+	// Encode to base64 and take first 32 characters
+	// Use URL-safe encoding without padding for alphanumeric characters
+	apiKey := base64.RawURLEncoding.EncodeToString(bytes)
+	if len(apiKey) > 32 {
+		apiKey = apiKey[:32]
+	}
+	
+	return apiKey, nil
+}
+
+// getAPICredentialsSecretName returns the name of the API credentials secret for an n8n instance
+func getAPICredentialsSecretName(n8nName string) string {
+	return fmt.Sprintf("%s-api-credentials", n8nName)
 }

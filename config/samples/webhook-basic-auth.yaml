@@ -1,0 +1,52 @@
+apiVersion: n8n.slys.dev/v1alpha1
+kind: N8nWorkflow
+metadata:
+  name: webhook-basic-auth-example
+spec:
+  n8nRef:
+    name: n8n-sample
+    namespace: default
+  workflow:
+    name: "Webhook with Basic Auth"
+    active: true
+    tags: ["webhook", "basic-auth", "example"]
+    nodes:
+    - id: "webhook-trigger"
+      name: "Webhook Trigger"
+      type: "n8n-nodes-base.webhook"
+      typeVersion: "1.0"
+      position: ["240", "300"]
+      parameters:
+        path: "webhook-endpoint"
+        httpMethod: "POST"
+        responseMode: "responseNode"
+        authentication: "basicAuth"
+      credentials:
+        httpBasicAuth: "webhook-basic-auth-cred"
+    - id: "response"
+      name: "Response"
+      type: "n8n-nodes-base.respondToWebhook"
+      typeVersion: "1.0"
+      position: ["460", "300"]
+      parameters:
+        respondWith: "json"
+        responseBody: |
+          {
+            "status": "success",
+            "message": "Webhook received",
+            "timestamp": "{{$now}}"
+          }
+    connections:
+      webhook-trigger:
+        main:
+        - - node: "response"
+            type: "main"
+            index: 0
+    settings:
+      executionOrder: "v1"
+  credentials:
+  - name: "webhook-basic-auth-cred"
+    type: "httpBasicAuth"
+    secretRef:
+      name: "webhook-basic-auth"
+      namespace: "default"

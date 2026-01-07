@@ -27,6 +27,7 @@ import (
 
 	n8nv1alpha1 "github.com/jakub-k-slys/n8n-operator/api/v1alpha1"
 	"github.com/jakub-k-slys/n8n-operator/internal/controller"
+	"github.com/jakub-k-slys/n8n-operator/internal/credentialmanager"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -50,7 +51,7 @@ func init() {
 	utilruntime.Must(gateway.Install(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(n8nv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(monitoringv1.AddToScheme(scheme))
+	// Note: ServiceMonitor scheme is conditionally added in main() based on --enable-prometheus flag
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -60,6 +61,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enablePrometheus bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -71,6 +73,8 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enablePrometheus, "enable-prometheus", true,
+		"If set, Prometheus ServiceMonitor support will be enabled. Requires Prometheus Operator to be installed.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -146,12 +150,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Conditionally register ServiceMonitor scheme if Prometheus support is enabled
+	if enablePrometheus {
+		setupLog.Info("Prometheus support enabled, registering ServiceMonitor scheme")
+		if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
+			setupLog.Error(err, "unable to add ServiceMonitor scheme")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("Prometheus support disabled, ServiceMonitor resources will not be managed")
+	}
+
 	if err = (&controller.N8nReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("n8n-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "N8n")
+		os.Exit(1)
+	}
+
+	// Set up N8nWorkflow controller
+	validator := controller.NewN8nInstanceValidator(mgr.GetClient())
+	credentialManager := credentialmanager.NewManager(mgr.GetClient())
+	
+	if err = (&controller.N8nWorkflowReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("n8nworkflow-controller"),
+		CredentialManager: credentialManager,
+		Validator:         validator,
+	}).SetupWithManager(mgr); err != nil{
+		setupLog.Error(err, "unable to create controller", "controller", "N8nWorkflow")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

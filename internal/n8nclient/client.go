@@ -42,8 +42,16 @@ type WorkflowResponse struct {
 // WorkflowDefinition represents a workflow definition for creation/update
 type WorkflowDefinition struct {
 	Name        string                 `json:"name"`
-	Active      bool                   `json:"active"`
+	Active      bool                   `json:"active,omitempty"` // Used for tracking desired state, not sent to API
 	Tags        []string               `json:"tags,omitempty"`
+	Nodes       []interface{}          `json:"nodes"`
+	Connections map[string]interface{} `json:"connections"`
+	Settings    map[string]interface{} `json:"settings,omitempty"`
+}
+
+// workflowCreateRequest represents the payload for creating a workflow (without active/tags fields)
+type workflowCreateRequest struct {
+	Name        string                 `json:"name"`
 	Nodes       []interface{}          `json:"nodes"`
 	Connections map[string]interface{} `json:"connections"`
 	Settings    map[string]interface{} `json:"settings,omitempty"`
@@ -51,26 +59,34 @@ type WorkflowDefinition struct {
 
 // CreateWorkflow creates a new workflow in n8n
 func (c *Client) CreateWorkflow(ctx context.Context, workflow WorkflowDefinition) (*WorkflowResponse, error) {
-	// Convert our WorkflowDefinition to the n8n library's Workflow type
-	n8nWorkflow := &n8n.Workflow{
+	// Create request payload without the 'active' and 'tags' fields (they're read-only during creation)
+	createReq := workflowCreateRequest{
 		Name:        workflow.Name,
-		Active:      &workflow.Active,
+		Nodes:       workflow.Nodes,
 		Connections: workflow.Connections,
-		// Note: We'll need to convert nodes and settings appropriately
-		// For now, we'll use empty values to get the basic structure working
-		Nodes:    []n8n.Node{},
-		Settings: n8n.WorkflowSettings{},
+		Settings:    workflow.Settings,
 	}
-
-	result, err := c.n8nClient.CreateWorkflow(n8nWorkflow)
+	
+	// Make direct HTTP call to n8n API instead of using the library
+	resp, err := c.doHTTPRequest(ctx, "POST", "/api/v1/workflows", createReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create workflow: %w", err)
 	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Active bool   `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode workflow response: %w", err)
+	}
 
 	response := &WorkflowResponse{
-		ID:     getStringValue(result.Id),
+		ID:     result.ID,
 		Name:   result.Name,
-		Active: getBoolValue(result.Active),
+		Active: result.Active,
 	}
 
 	return response, nil
@@ -78,25 +94,35 @@ func (c *Client) CreateWorkflow(ctx context.Context, workflow WorkflowDefinition
 
 // UpdateWorkflow updates an existing workflow in n8n
 func (c *Client) UpdateWorkflow(ctx context.Context, workflowID string, workflow WorkflowDefinition) (*WorkflowResponse, error) {
-	// Convert our WorkflowDefinition to the n8n library's Workflow type
-	n8nWorkflow := &n8n.Workflow{
+	// Create request payload without the 'active' and 'tags' fields (they're read-only during update too)
+	updateReq := workflowCreateRequest{
 		Name:        workflow.Name,
-		Active:      &workflow.Active,
+		Nodes:       workflow.Nodes,
 		Connections: workflow.Connections,
-		// Note: We'll need to convert nodes and settings appropriately
-		Nodes:    []n8n.Node{},
-		Settings: n8n.WorkflowSettings{},
+		Settings:    workflow.Settings,
 	}
-
-	result, err := c.n8nClient.UpdateWorkflow(workflowID, n8nWorkflow)
+	
+	// Make direct HTTP call to n8n API instead of using the library
+	path := fmt.Sprintf("/api/v1/workflows/%s", workflowID)
+	resp, err := c.doHTTPRequest(ctx, "PUT", path, updateReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update workflow: %w", err)
 	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Active bool   `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode workflow response: %w", err)
+	}
 
 	response := &WorkflowResponse{
-		ID:     getStringValue(result.Id),
+		ID:     result.ID,
 		Name:   result.Name,
-		Active: getBoolValue(result.Active),
+		Active: result.Active,
 	}
 
 	return response, nil
@@ -265,6 +291,8 @@ func (c *Client) doHTTPRequest(ctx context.Context, method, path string, body in
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
+		// Log the request body for debugging
+		fmt.Printf("DEBUG: HTTP %s %s\nBody: %s\n", method, path, string(jsonBody))
 		reqBody = bytes.NewBuffer(jsonBody)
 	}
 
@@ -325,4 +353,44 @@ func (e *APIError) IsNotFound() bool {
 // IsConflict returns true if the error is a 409 Conflict
 func (e *APIError) IsConflict() bool {
 	return e.StatusCode == http.StatusConflict
+}
+
+// convertNodesToN8nFormat converts our generic node representation to n8n.Node format
+func convertNodesToN8nFormat(nodes []interface{}) ([]n8n.Node, error) {
+	if len(nodes) == 0 {
+		return []n8n.Node{}, nil
+	}
+
+	// Convert to JSON and back to properly marshal the data
+	jsonData, err := json.Marshal(nodes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal nodes: %w", err)
+	}
+
+	var n8nNodes []n8n.Node
+	if err := json.Unmarshal(jsonData, &n8nNodes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal nodes to n8n format: %w", err)
+	}
+
+	return n8nNodes, nil
+}
+
+// convertSettingsToN8nFormat converts our generic settings representation to n8n.WorkflowSettings format
+func convertSettingsToN8nFormat(settings map[string]interface{}) (n8n.WorkflowSettings, error) {
+	if len(settings) == 0 {
+		return n8n.WorkflowSettings{}, nil
+	}
+
+	// Convert to JSON and back to properly marshal the data
+	jsonData, err := json.Marshal(settings)
+	if err != nil {
+		return n8n.WorkflowSettings{}, fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
+	var n8nSettings n8n.WorkflowSettings
+	if err := json.Unmarshal(jsonData, &n8nSettings); err != nil {
+		return n8n.WorkflowSettings{}, fmt.Errorf("failed to unmarshal settings to n8n format: %w", err)
+	}
+
+	return n8nSettings, nil
 }

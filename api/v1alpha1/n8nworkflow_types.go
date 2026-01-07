@@ -46,12 +46,15 @@ type WorkflowNode struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type"`
-	// TypeVersion is the version of the node type
+	// TypeVersion is the version of the node type (must be a number like 1.3, not a string)
 	// +kubebuilder:validation:Optional
-	TypeVersion string `json:"typeVersion,omitempty"`
-	// Position defines the visual position of the node in the workflow editor
+	// +kubebuilder:validation:Type=number
+	// +kubebuilder:validation:Format=double
+	// +crd:allowDangerousTypes=true
+	TypeVersion float64 `json:"typeVersion,omitempty"`
+	// Position defines the visual position of the node in the workflow editor [x, y]
 	// +kubebuilder:validation:Optional
-	Position []string `json:"position,omitempty"`
+	Position []int `json:"position,omitempty"`
 	// Parameters contains the configuration parameters for this node
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -151,6 +154,9 @@ type N8nWorkflowStatus struct {
 	// CredentialsSynced indicates whether all required credentials have been synced
 	// +kubebuilder:validation:Optional
 	CredentialsSynced bool `json:"credentialsSynced,omitempty"`
+	// CredentialIDs maps credential names to their IDs in n8n
+	// +kubebuilder:validation:Optional
+	CredentialIDs map[string]string `json:"credentialIds,omitempty"`
 	// ObservedGeneration reflects the generation of the most recently observed N8nWorkflow
 	// +kubebuilder:validation:Optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
