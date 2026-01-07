@@ -35,8 +35,8 @@ func (v *N8nInstanceValidator) ValidateN8nInstanceReference(ctx context.Context,
 		n8nNamespace = workflow.Namespace
 	}
 
-	logger.Info("Validating n8n instance reference", 
-		"n8nName", workflow.Spec.N8nRef.Name, 
+	logger.Info("Validating n8n instance reference",
+		"n8nName", workflow.Spec.N8nRef.Name,
 		"n8nNamespace", n8nNamespace,
 		"workflowNamespace", workflow.Namespace)
 
@@ -79,8 +79,8 @@ func (v *N8nInstanceValidator) ValidateN8nInstanceReference(ctx context.Context,
 // validateCrossNamespaceAccess validates that cross-namespace access is allowed
 func (v *N8nInstanceValidator) validateCrossNamespaceAccess(ctx context.Context, workflow *n8nv1alpha1.N8nWorkflow, n8nInstance *n8nv1alpha1.N8n) error {
 	logger := log.FromContext(ctx)
-	
-	logger.Info("Validating cross-namespace access", 
+
+	logger.Info("Validating cross-namespace access",
 		"workflowNamespace", workflow.Namespace,
 		"n8nNamespace", n8nInstance.Namespace)
 
@@ -123,25 +123,25 @@ func (v *N8nInstanceValidator) validateN8nInstanceAccessibility(ctx context.Cont
 
 	// Create a basic n8n client for connectivity testing
 	baseURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:5678", n8nInstance.Name, n8nInstance.Namespace)
-	
+
 	// For now, we'll skip the actual connectivity test as it requires proper API credentials
 	// In a real implementation, you would:
 	// 1. Get API credentials from the n8n instance configuration
 	// 2. Create an n8n client
 	// 3. Perform a basic health check (e.g., GET /healthz or similar)
-	
+
 	logger.Info("N8n instance accessibility check", "baseURL", baseURL)
-	
+
 	// Placeholder for actual connectivity test
 	// client, err := n8nclient.NewClient(baseURL, apiKey)
 	// if err != nil {
 	//     return fmt.Errorf("failed to create n8n client: %w", err)
 	// }
-	
+
 	// Perform a simple health check with timeout
 	// ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	// defer cancel()
-	
+
 	// if err := client.HealthCheck(ctx); err != nil {
 	//     return fmt.Errorf("n8n instance health check failed: %w", err)
 	// }
@@ -194,7 +194,7 @@ func (v *N8nInstanceValidator) ValidateWorkflowIndependence(ctx context.Context,
 		if v.referenceSameN8nInstance(workflow, &existingWorkflow) {
 			// Check for workflow name conflicts
 			if workflow.Spec.Workflow.Name == existingWorkflow.Spec.Workflow.Name {
-				conflictingWorkflows = append(conflictingWorkflows, 
+				conflictingWorkflows = append(conflictingWorkflows,
 					fmt.Sprintf("%s/%s", existingWorkflow.Namespace, existingWorkflow.Name))
 			}
 		}
@@ -236,7 +236,7 @@ type HealthCheckResult struct {
 // PerformHealthCheck performs a comprehensive health check on an n8n instance
 func (v *N8nInstanceValidator) PerformHealthCheck(ctx context.Context, n8nInstance *n8nv1alpha1.N8n) (*HealthCheckResult, error) {
 	logger := log.FromContext(ctx)
-	
+
 	result := &HealthCheckResult{
 		Timestamp: time.Now(),
 	}
@@ -255,7 +255,7 @@ func (v *N8nInstanceValidator) PerformHealthCheck(ctx context.Context, n8nInstan
 	// 3. Verifying the response
 
 	logger.Info("Health check performed", "instance", n8nInstance.Name, "namespace", n8nInstance.Namespace)
-	
+
 	result.Healthy = true
 	result.Message = "N8n instance is healthy"
 	return result, nil

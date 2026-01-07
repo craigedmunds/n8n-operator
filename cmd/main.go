@@ -173,14 +173,14 @@ func main() {
 	// Set up N8nWorkflow controller
 	validator := controller.NewN8nInstanceValidator(mgr.GetClient())
 	credentialManager := credentialmanager.NewManager(mgr.GetClient())
-	
+
 	if err = (&controller.N8nWorkflowReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
 		Recorder:          mgr.GetEventRecorderFor("n8nworkflow-controller"),
 		CredentialManager: credentialManager,
 		Validator:         validator,
-	}).SetupWithManager(mgr); err != nil{
+	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "N8nWorkflow")
 		os.Exit(1)
 	}

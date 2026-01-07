@@ -126,14 +126,14 @@ func generateAPIKey() (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
-	
+
 	// Encode to base64 and take first 32 characters
 	// Use URL-safe encoding without padding for alphanumeric characters
 	apiKey := base64.RawURLEncoding.EncodeToString(bytes)
 	if len(apiKey) > 32 {
 		apiKey = apiKey[:32]
 	}
-	
+
 	return apiKey, nil
 }
 

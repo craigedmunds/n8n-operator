@@ -66,7 +66,7 @@ func (c *Client) CreateWorkflow(ctx context.Context, workflow WorkflowDefinition
 		Connections: workflow.Connections,
 		Settings:    workflow.Settings,
 	}
-	
+
 	// Make direct HTTP call to n8n API instead of using the library
 	resp, err := c.doHTTPRequest(ctx, "POST", "/api/v1/workflows", createReq)
 	if err != nil {
@@ -101,7 +101,7 @@ func (c *Client) UpdateWorkflow(ctx context.Context, workflowID string, workflow
 		Connections: workflow.Connections,
 		Settings:    workflow.Settings,
 	}
-	
+
 	// Make direct HTTP call to n8n API instead of using the library
 	path := fmt.Sprintf("/api/v1/workflows/%s", workflowID)
 	resp, err := c.doHTTPRequest(ctx, "PUT", path, updateReq)

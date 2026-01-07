@@ -11,14 +11,14 @@ import (
 func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployment, error) {
 	ls := labelsForN8n()
 	replicas := int32(1)
-	
+
 	// Use version from spec, fallback to build-time version
 	version := n8n.Spec.Version
 	if version == "" {
 		version = n8nVersion
 	}
 	image := "ghcr.io/n8n-io/n8n:" + version
-	
+
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
 	var initContainers []corev1.Container
@@ -43,7 +43,7 @@ func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployme
 		if err := r.createPVCIfNotExists(n8n); err != nil {
 			return nil, err
 		}
-		
+
 		// Add init container only when persistent storage is enabled
 		// Note: This requires privileged access to change ownership
 		initContainers = append(initContainers, corev1.Container{

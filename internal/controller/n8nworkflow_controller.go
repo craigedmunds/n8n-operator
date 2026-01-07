@@ -26,12 +26,12 @@ const (
 	typeAvailableN8nWorkflow = "Available"
 	typeDegradedN8nWorkflow  = "Degraded"
 	typeReadyN8nWorkflow     = "Ready"
-	
+
 	// Sync status values
-	syncStatusSynced   = "Synced"
-	syncStatusSyncing  = "Syncing"
-	syncStatusFailed   = "Failed"
-	syncStatusUnknown  = "Unknown"
+	syncStatusSynced  = "Synced"
+	syncStatusSyncing = "Syncing"
+	syncStatusFailed  = "Failed"
+	syncStatusUnknown = "Unknown"
 )
 
 // N8nWorkflowReconciler reconciles a N8nWorkflow object
@@ -231,9 +231,9 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// Update status with actual state from n8n
 		actualActive := actualWorkflow.Active
 		if actualActive != workflow.Spec.Workflow.Active {
-			logger.Info("Workflow activation state mismatch detected", 
-				"workflowID", workflowID, 
-				"desired", workflow.Spec.Workflow.Active, 
+			logger.Info("Workflow activation state mismatch detected",
+				"workflowID", workflowID,
+				"desired", workflow.Spec.Workflow.Active,
 				"actual", actualActive)
 		}
 
@@ -256,7 +256,7 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("Successfully reconciled N8nWorkflow", "workflowID", workflowID, "active", workflow.Status.Active, "credentialsSynced", credentialsSynced)
-	
+
 	// Perform health check if we have a workflow ID
 	if workflowID != "" {
 		if err := r.performHealthCheck(ctx, workflow, n8nClient, workflowID); err != nil {
@@ -266,7 +266,7 @@ func (r *N8nWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				fmt.Sprintf("Health check failed for workflow %s: %v", workflowID, err))
 		}
 	}
-	
+
 	return ctrl.Result{RequeueAfter: time.Minute * 10}, nil // Requeue for periodic health checks
 }
 
@@ -362,15 +362,15 @@ func (r *N8nWorkflowReconciler) doFinalizerOperationsForN8nWorkflow(ctx context.
 				logger.Error(err, "Failed to delete workflow from n8n during cleanup", "workflowID", workflow.Status.WorkflowID)
 				r.Recorder.Event(workflow, "Warning", "DeletionFailed",
 					fmt.Sprintf("Failed to delete workflow %s from n8n: %v", workflow.Status.WorkflowID, err))
-				
+
 				// For cleanup operations, we should be more lenient
 				// Only fail if it's a configuration error that indicates we should retry
 				if isConfigurationError(err) {
 					return fmt.Errorf("configuration error during workflow deletion: %w", err)
 				}
-				
+
 				// For other errors (network, transient), log but don't fail cleanup
-				logger.Info("Ignoring error during cleanup to prevent resource from being stuck", 
+				logger.Info("Ignoring error during cleanup to prevent resource from being stuck",
 					"workflowID", workflow.Status.WorkflowID, "error", err)
 			}
 		} else {
@@ -390,13 +390,13 @@ func (r *N8nWorkflowReconciler) doFinalizerOperationsForN8nWorkflow(ctx context.
 // createN8nClient creates an n8n API client for the given n8n instance
 func (r *N8nWorkflowReconciler) createN8nClient(ctx context.Context, n8nInstance *n8nv1alpha1.N8n) (*n8nclient.Client, error) {
 	logger := log.FromContext(ctx)
-	
+
 	// Get the API credentials secret name from the N8n instance status
 	if n8nInstance.Status.APICredentialsSecretName == "" {
-		return nil, fmt.Errorf("n8n instance %s/%s does not have API credentials secret configured", 
+		return nil, fmt.Errorf("n8n instance %s/%s does not have API credentials secret configured",
 			n8nInstance.Namespace, n8nInstance.Name)
 	}
-	
+
 	// Retrieve the API credentials secret
 	secretName := n8nInstance.Status.APICredentialsSecretName
 	secret := &corev1.Secret{}
@@ -406,32 +406,32 @@ func (r *N8nWorkflowReconciler) createN8nClient(ctx context.Context, n8nInstance
 	}, secret)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("API credentials secret %s not found in namespace %s", 
+			return nil, fmt.Errorf("API credentials secret %s not found in namespace %s",
 				secretName, n8nInstance.Namespace)
 		}
 		return nil, fmt.Errorf("failed to retrieve API credentials secret: %w", err)
 	}
-	
+
 	// Extract the API key from the secret
 	apiKeyBytes, ok := secret.Data["apiKey"]
 	if !ok {
 		return nil, fmt.Errorf("API credentials secret %s does not contain 'apiKey' field", secretName)
 	}
 	apiKey := string(apiKeyBytes)
-	
+
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key in secret %s is empty", secretName)
 	}
-	
+
 	// Construct the base URL for the n8n instance
 	// Use port 80 which is the standard HTTP port exposed by the n8n service
 	baseURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", n8nInstance.Name, n8nInstance.Namespace)
-	
-	logger.Info("Creating n8n client", 
-		"baseURL", baseURL, 
+
+	logger.Info("Creating n8n client",
+		"baseURL", baseURL,
 		"secretName", secretName,
 		"namespace", n8nInstance.Namespace)
-	
+
 	return n8nclient.NewClient(baseURL, apiKey)
 }
 
@@ -446,7 +446,7 @@ func (r *N8nWorkflowReconciler) syncWorkflow(ctx context.Context, workflow *n8nv
 	}
 
 	// Log the workflow definition for debugging
-	logger.Info("Converted workflow definition", 
+	logger.Info("Converted workflow definition",
 		"nodeCount", len(workflowDef.Nodes),
 		"hasConnections", workflowDef.Connections != nil,
 		"hasSettings", workflowDef.Settings != nil)
@@ -498,14 +498,14 @@ func (r *N8nWorkflowReconciler) handleWorkflowActivation(ctx context.Context, wo
 
 	// Check if activation state needs to be changed
 	if desiredActive == currentActive {
-		logger.V(1).Info("Workflow activation state already matches desired state", 
+		logger.V(1).Info("Workflow activation state already matches desired state",
 			"workflowID", workflowID, "active", desiredActive)
 		return nil
 	}
 
-	logger.Info("Updating workflow activation state", 
-		"workflowID", workflowID, 
-		"currentActive", currentActive, 
+	logger.Info("Updating workflow activation state",
+		"workflowID", workflowID,
+		"currentActive", currentActive,
 		"desiredActive", desiredActive)
 
 	// Attempt to change activation state
@@ -525,7 +525,7 @@ func (r *N8nWorkflowReconciler) handleWorkflowActivation(ctx context.Context, wo
 	r.Recorder.Event(workflow, "Normal", action,
 		fmt.Sprintf("Workflow %s successfully %s", workflowID, action))
 
-	logger.Info("Successfully updated workflow activation state", 
+	logger.Info("Successfully updated workflow activation state",
 		"workflowID", workflowID, "active", desiredActive)
 
 	return nil
@@ -541,7 +541,7 @@ func (r *N8nWorkflowReconciler) performHealthCheck(ctx context.Context, workflow
 		if apiErr, ok := err.(*n8nclient.APIError); ok && apiErr.IsNotFound() {
 			// Workflow doesn't exist in n8n but we think it should
 			logger.Error(err, "Workflow not found in n8n during health check", "workflowID", workflowID)
-			
+
 			// Update status to indicate health check failure
 			update := StatusUpdate{
 				SyncStatus:      syncStatusFailed,
@@ -554,7 +554,7 @@ func (r *N8nWorkflowReconciler) performHealthCheck(ctx context.Context, workflow
 			if updateErr := r.updateComprehensiveStatus(ctx, workflow, update); updateErr != nil {
 				logger.Error(updateErr, "Failed to update status after health check failure")
 			}
-			
+
 			return fmt.Errorf("workflow %s not found in n8n", workflowID)
 		}
 		return fmt.Errorf("failed to get workflow during health check: %w", err)
@@ -566,7 +566,7 @@ func (r *N8nWorkflowReconciler) performHealthCheck(ctx context.Context, workflow
 			"workflowID", workflowID,
 			"expected", workflow.Status.Active,
 			"actual", actualWorkflow.Active)
-		
+
 		// Update status to reflect actual state
 		update := StatusUpdate{
 			Active: &actualWorkflow.Active,
@@ -574,7 +574,7 @@ func (r *N8nWorkflowReconciler) performHealthCheck(ctx context.Context, workflow
 		if updateErr := r.updateComprehensiveStatus(ctx, workflow, update); updateErr != nil {
 			logger.Error(updateErr, "Failed to update status after detecting activation drift")
 		}
-		
+
 		r.Recorder.Event(workflow, "Warning", "ActivationDrift",
 			fmt.Sprintf("Workflow activation state drifted from expected %t to actual %t", workflow.Status.Active, actualWorkflow.Active))
 	}
@@ -586,38 +586,38 @@ func (r *N8nWorkflowReconciler) performHealthCheck(ctx context.Context, workflow
 // handleReconciliationError provides comprehensive error handling for reconciliation failures
 func (r *N8nWorkflowReconciler) handleReconciliationError(ctx context.Context, workflow *n8nv1alpha1.N8nWorkflow, err error, operation string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	
+
 	// Determine error type and appropriate response
 	var errorMessage string
 	var reason string
 	var requeueAfter time.Duration = time.Minute * 5 // Default requeue time
-	
+
 	switch {
 	case isTransientError(err):
 		errorMessage = fmt.Sprintf("Transient error during %s: %v", operation, err)
 		reason = "TransientError"
 		requeueAfter = time.Minute * 2 // Shorter requeue for transient errors
 		logger.Info("Transient error encountered", "operation", operation, "error", err)
-		
+
 	case isConfigurationError(err):
 		errorMessage = fmt.Sprintf("Configuration error during %s: %v", operation, err)
 		reason = "ConfigurationError"
 		requeueAfter = time.Minute * 10 // Longer requeue for config errors
 		logger.Error(err, "Configuration error encountered", "operation", operation)
-		
+
 	case isNetworkError(err):
 		errorMessage = fmt.Sprintf("Network error during %s: %v", operation, err)
 		reason = "NetworkError"
 		requeueAfter = time.Minute * 3 // Medium requeue for network errors
 		logger.Error(err, "Network error encountered", "operation", operation)
-		
+
 	default:
 		errorMessage = fmt.Sprintf("Unknown error during %s: %v", operation, err)
 		reason = "UnknownError"
 		requeueAfter = time.Minute * 5 // Default requeue
 		logger.Error(err, "Unknown error encountered", "operation", operation)
 	}
-	
+
 	// Update status with error information
 	update := StatusUpdate{
 		SyncStatus:      syncStatusFailed,
@@ -627,15 +627,15 @@ func (r *N8nWorkflowReconciler) handleReconciliationError(ctx context.Context, w
 		Reason:          reason,
 		Message:         errorMessage,
 	}
-	
+
 	if statusErr := r.updateComprehensiveStatus(ctx, workflow, update); statusErr != nil {
 		logger.Error(statusErr, "Failed to update status after error", "originalError", err)
 		return ctrl.Result{}, statusErr
 	}
-	
+
 	// Record event
 	r.Recorder.Event(workflow, "Warning", reason, errorMessage)
-	
+
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
@@ -644,12 +644,12 @@ func isTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Check for API errors that are typically transient
 	if apiErr, ok := err.(*n8nclient.APIError); ok {
 		return apiErr.StatusCode >= 500 && apiErr.StatusCode < 600 // 5xx errors are typically transient
 	}
-	
+
 	// Check for network-related errors that might be transient
 	errStr := err.Error()
 	transientPatterns := []string{
@@ -658,13 +658,13 @@ func isTransientError(err error) bool {
 		"temporary failure",
 		"service unavailable",
 	}
-	
+
 	for _, pattern := range transientPatterns {
 		if contains(errStr, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -672,12 +672,12 @@ func isConfigurationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Check for API errors that indicate configuration issues
 	if apiErr, ok := err.(*n8nclient.APIError); ok {
 		return apiErr.StatusCode == 400 || apiErr.StatusCode == 422 // Bad Request or Unprocessable Entity
 	}
-	
+
 	// Check for validation errors
 	errStr := err.Error()
 	configPatterns := []string{
@@ -686,13 +686,13 @@ func isConfigurationError(err error) bool {
 		"missing required field",
 		"invalid credential",
 	}
-	
+
 	for _, pattern := range configPatterns {
 		if contains(errStr, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -700,7 +700,7 @@ func isNetworkError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := err.Error()
 	networkPatterns := []string{
 		"connection reset",
@@ -708,13 +708,13 @@ func isNetworkError(err error) bool {
 		"network unreachable",
 		"dns resolution failed",
 	}
-	
+
 	for _, pattern := range networkPatterns {
 		if contains(errStr, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -727,11 +727,11 @@ func contains(s, substr string) bool {
 // Exported for testing purposes
 func (r *N8nWorkflowReconciler) ConvertWorkflowDefinition(workflow *n8nv1alpha1.N8nWorkflow, credentialIDs map[string]string) (*n8nclient.WorkflowDefinition, error) {
 	logger := log.Log.WithName("convertWorkflowDefinition")
-	
+
 	// Convert nodes
 	nodes := make([]interface{}, len(workflow.Spec.Workflow.Nodes))
 	logger.Info("Converting workflow nodes", "nodeCount", len(workflow.Spec.Workflow.Nodes))
-	
+
 	for i, node := range workflow.Spec.Workflow.Nodes {
 		nodeMap := map[string]interface{}{
 			"id":   node.ID,
@@ -804,13 +804,13 @@ func (r *N8nWorkflowReconciler) ConvertWorkflowDefinition(workflow *n8nv1alpha1.
 		Connections: connections,
 		Settings:    settings,
 	}
-	
-	logger.Info("Workflow definition converted", 
+
+	logger.Info("Workflow definition converted",
 		"name", result.Name,
 		"nodeCount", len(result.Nodes),
 		"hasConnections", result.Connections != nil,
 		"hasSettings", result.Settings != nil)
-	
+
 	return result, nil
 }
 
@@ -911,16 +911,16 @@ func (r *N8nWorkflowReconciler) updateComprehensiveStatus(ctx context.Context, w
 
 // StatusUpdate represents a comprehensive status update
 type StatusUpdate struct {
-	SyncStatus         string
-	ErrorMessage       string
-	CredentialsSynced  *bool
-	CredentialIDs      map[string]string
-	WorkflowID         string
-	Active             *bool
-	ConditionType      string
-	ConditionStatus    metav1.ConditionStatus
-	Reason             string
-	Message            string
+	SyncStatus        string
+	ErrorMessage      string
+	CredentialsSynced *bool
+	CredentialIDs     map[string]string
+	WorkflowID        string
+	Active            *bool
+	ConditionType     string
+	ConditionStatus   metav1.ConditionStatus
+	Reason            string
+	Message           string
 }
 
 // SetupWithManager sets up the controller with the Manager.

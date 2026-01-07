@@ -77,7 +77,7 @@ func TestWorkflowCreation(t *testing.T) {
 	}
 
 	settings := map[string]interface{}{
-		"executionOrder":  "v1",
+		"executionOrder": "v1",
 		"availableInMCP": false,
 	}
 

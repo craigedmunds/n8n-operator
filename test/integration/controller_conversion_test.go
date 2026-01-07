@@ -16,8 +16,8 @@ import (
 // TestControllerConversionFromYAML tests that the controller correctly converts
 // a workflow loaded from YAML to the n8n API format
 func TestControllerConversionFromYAML(t *testing.T) {
-	// Load the sample workflow YAML
-	yamlPath := filepath.Join("..", "..", "..", "k8s-lab", "supporting-applications", "n8n", "sample-workflow.yaml")
+	// Load the sample workflow YAML from local testdata
+	yamlPath := filepath.Join("testdata", "sample-workflow.yaml")
 	yamlData, err := os.ReadFile(yamlPath)
 	if err != nil {
 		t.Fatalf("Failed to read sample workflow YAML: %v", err)
@@ -50,9 +50,9 @@ func TestControllerConversionFromYAML(t *testing.T) {
 
 	// Check first node (schedule trigger)
 	node0 := workflow.Spec.Workflow.Nodes[0]
-	t.Logf("Node 0: id=%s, type=%s, typeVersion=%v, position=%v", 
+	t.Logf("Node 0: id=%s, type=%s, typeVersion=%v, position=%v",
 		node0.ID, node0.Type, node0.TypeVersion, node0.Position)
-	
+
 	if node0.TypeVersion == 0 {
 		t.Errorf("Node 0 typeVersion is 0, expected a number like 1.3")
 	}
@@ -62,9 +62,9 @@ func TestControllerConversionFromYAML(t *testing.T) {
 
 	// Check second node (HTTP request)
 	node1 := workflow.Spec.Workflow.Nodes[1]
-	t.Logf("Node 1: id=%s, type=%s, typeVersion=%v, position=%v", 
+	t.Logf("Node 1: id=%s, type=%s, typeVersion=%v, position=%v",
 		node1.ID, node1.Type, node1.TypeVersion, node1.Position)
-	
+
 	if node1.TypeVersion == 0 {
 		t.Errorf("Node 1 typeVersion is 0, expected a number like 4.3")
 	}

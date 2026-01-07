@@ -113,7 +113,7 @@ func (r *N8nReconciler) createOrUpdateDeployment(ctx context.Context, n8n *n8nv1
 	log := log.FromContext(ctx)
 	existingDep := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Name: n8n.Name, Namespace: n8n.Namespace}, existingDep)
-	
+
 	if err != nil && apierrors.IsNotFound(err) {
 		// Deployment doesn't exist, create it
 		dep, err := r.deploymentForN8n(n8n)
@@ -125,31 +125,31 @@ func (r *N8nReconciler) createOrUpdateDeployment(ctx context.Context, n8n *n8nv1
 	} else if err != nil {
 		return r.handleResourceError(ctx, n8n, err, "Deployment")
 	}
-	
+
 	// Deployment exists - check if it needs to be updated
 	desiredDep, err := r.deploymentForN8n(n8n)
 	if err != nil {
 		return r.handleResourceError(ctx, n8n, err, "Deployment")
 	}
-	
+
 	needsUpdate := r.deploymentNeedsUpdate(existingDep, desiredDep)
-	
+
 	if needsUpdate {
 		log.Info("Deployment configuration has changed, updating", "name", existingDep.Name)
-		
+
 		// Preserve the existing deployment's metadata
 		desiredDep.ObjectMeta.ResourceVersion = existingDep.ObjectMeta.ResourceVersion
 		desiredDep.ObjectMeta.UID = existingDep.ObjectMeta.UID
 		desiredDep.ObjectMeta.CreationTimestamp = existingDep.ObjectMeta.CreationTimestamp
 		desiredDep.ObjectMeta.Generation = existingDep.ObjectMeta.Generation
-		
+
 		// Update the deployment
 		if err := r.Update(ctx, desiredDep); err != nil {
 			return r.handleResourceError(ctx, n8n, err, "Deployment")
 		}
 		log.Info("Deployment updated successfully", "name", desiredDep.Name)
 	}
-	
+
 	return nil
 }
 
@@ -162,29 +162,29 @@ func (r *N8nReconciler) deploymentNeedsUpdate(existing, desired *appsv1.Deployme
 			return true
 		}
 	}
-	
+
 	// Check if environment variables have changed
 	if !envVarsEqual(existing.Spec.Template.Spec.Containers[0].Env, desired.Spec.Template.Spec.Containers[0].Env) {
 		return true
 	}
-	
+
 	// Check if volumes have changed
 	if !volumesEqual(existing.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) {
 		return true
 	}
-	
+
 	// Check if volume mounts have changed
 	if len(existing.Spec.Template.Spec.Containers) > 0 && len(desired.Spec.Template.Spec.Containers) > 0 {
 		if !volumeMountsEqual(existing.Spec.Template.Spec.Containers[0].VolumeMounts, desired.Spec.Template.Spec.Containers[0].VolumeMounts) {
 			return true
 		}
 	}
-	
+
 	// Check if init containers have changed
 	if !initContainersEqual(existing.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -193,36 +193,36 @@ func envVarsEqual(existing, desired []corev1.EnvVar) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
-	
+
 	// Create maps for easier comparison
 	existingMap := make(map[string]corev1.EnvVar)
 	for _, env := range existing {
 		existingMap[env.Name] = env
 	}
-	
+
 	for _, desiredEnv := range desired {
 		existingEnv, exists := existingMap[desiredEnv.Name]
 		if !exists {
 			return false
 		}
-		
+
 		// Compare values
 		if desiredEnv.Value != existingEnv.Value {
 			return false
 		}
-		
+
 		// Compare ValueFrom (for secret references)
 		if (desiredEnv.ValueFrom == nil) != (existingEnv.ValueFrom == nil) {
 			return false
 		}
-		
+
 		if desiredEnv.ValueFrom != nil && existingEnv.ValueFrom != nil {
 			if !envVarSourceEqual(existingEnv.ValueFrom, desiredEnv.ValueFrom) {
 				return false
 			}
 		}
 	}
-	
+
 	return true
 }
 
@@ -232,16 +232,16 @@ func envVarSourceEqual(existing, desired *corev1.EnvVarSource) bool {
 	if (existing.SecretKeyRef == nil) != (desired.SecretKeyRef == nil) {
 		return false
 	}
-	
+
 	if existing.SecretKeyRef != nil && desired.SecretKeyRef != nil {
 		if existing.SecretKeyRef.Name != desired.SecretKeyRef.Name ||
 			existing.SecretKeyRef.Key != desired.SecretKeyRef.Key {
 			return false
 		}
 	}
-	
+
 	// Add more comparisons for ConfigMapKeyRef, FieldRef, etc. if needed
-	
+
 	return true
 }
 
@@ -250,41 +250,41 @@ func volumesEqual(existing, desired []corev1.Volume) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
-	
+
 	existingMap := make(map[string]corev1.Volume)
 	for _, vol := range existing {
 		existingMap[vol.Name] = vol
 	}
-	
+
 	for _, desiredVol := range desired {
 		existingVol, exists := existingMap[desiredVol.Name]
 		if !exists {
 			return false
 		}
-		
+
 		// Compare PVC volumes
 		if (desiredVol.VolumeSource.PersistentVolumeClaim == nil) != (existingVol.VolumeSource.PersistentVolumeClaim == nil) {
 			return false
 		}
-		
+
 		if desiredVol.VolumeSource.PersistentVolumeClaim != nil && existingVol.VolumeSource.PersistentVolumeClaim != nil {
 			if desiredVol.VolumeSource.PersistentVolumeClaim.ClaimName != existingVol.VolumeSource.PersistentVolumeClaim.ClaimName {
 				return false
 			}
 		}
-		
+
 		// Compare Secret volumes
 		if (desiredVol.VolumeSource.Secret == nil) != (existingVol.VolumeSource.Secret == nil) {
 			return false
 		}
-		
+
 		if desiredVol.VolumeSource.Secret != nil && existingVol.VolumeSource.Secret != nil {
 			if desiredVol.VolumeSource.Secret.SecretName != existingVol.VolumeSource.Secret.SecretName {
 				return false
 			}
 		}
 	}
-	
+
 	return true
 }
 
@@ -293,23 +293,23 @@ func volumeMountsEqual(existing, desired []corev1.VolumeMount) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
-	
+
 	existingMap := make(map[string]corev1.VolumeMount)
 	for _, mount := range existing {
 		existingMap[mount.Name] = mount
 	}
-	
+
 	for _, desiredMount := range desired {
 		existingMount, exists := existingMap[desiredMount.Name]
 		if !exists {
 			return false
 		}
-		
+
 		if desiredMount.MountPath != existingMount.MountPath {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -318,20 +318,20 @@ func initContainersEqual(existing, desired []corev1.Container) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
-	
+
 	// For simplicity, we'll just check if the number and names match
 	// A more thorough comparison could check images, commands, etc.
 	existingMap := make(map[string]bool)
 	for _, container := range existing {
 		existingMap[container.Name] = true
 	}
-	
+
 	for _, desiredContainer := range desired {
 		if !existingMap[desiredContainer.Name] {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -377,42 +377,42 @@ func (r *N8nReconciler) createOrUpdateServiceMonitor(ctx context.Context, n8n *n
 func (r *N8nReconciler) createOrUpdateAPICredentialsSecret(ctx context.Context, n8n *n8nv1alpha1.N8n) error {
 	secretName := getAPICredentialsSecretName(n8n.Name)
 	secret := &corev1.Secret{}
-	
+
 	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: n8n.Namespace}, secret)
 	if err != nil && apierrors.IsNotFound(err) {
 		// Secret doesn't exist, create it
-apiKey, err := generateAPIKey()
-if err != nil {
-return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
-}
+		apiKey, err := generateAPIKey()
+		if err != nil {
+			return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
+		}
 
-secret, err := r.apiCredentialsSecretForN8n(n8n, apiKey)
-if err != nil {
-return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
-}
+		secret, err := r.apiCredentialsSecretForN8n(n8n, apiKey)
+		if err != nil {
+			return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
+		}
 
-if err := r.Create(ctx, secret); err != nil {
-return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
-}
+		if err := r.Create(ctx, secret); err != nil {
+			return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
+		}
 
-// Update status with secret name
-n8n.Status.APICredentialsSecretName = secretName
-if err := r.Status().Update(ctx, n8n); err != nil {
-return fmt.Errorf("failed to update status with API credentials secret name: %w", err)
-}
+		// Update status with secret name
+		n8n.Status.APICredentialsSecretName = secretName
+		if err := r.Status().Update(ctx, n8n); err != nil {
+			return fmt.Errorf("failed to update status with API credentials secret name: %w", err)
+		}
 
-return nil
-} else if err != nil {
-return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
-}
+		return nil
+	} else if err != nil {
+		return r.handleResourceError(ctx, n8n, err, "API Credentials Secret")
+	}
 
-// Secret exists, ensure status is updated
-if n8n.Status.APICredentialsSecretName != secretName {
-n8n.Status.APICredentialsSecretName = secretName
-if err := r.Status().Update(ctx, n8n); err != nil {
-return fmt.Errorf("failed to update status with API credentials secret name: %w", err)
-}
-}
+	// Secret exists, ensure status is updated
+	if n8n.Status.APICredentialsSecretName != secretName {
+		n8n.Status.APICredentialsSecretName = secretName
+		if err := r.Status().Update(ctx, n8n); err != nil {
+			return fmt.Errorf("failed to update status with API credentials secret name: %w", err)
+		}
+	}
 
-return nil
+	return nil
 }

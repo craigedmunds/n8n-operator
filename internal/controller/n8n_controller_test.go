@@ -475,7 +475,7 @@ func cleanupAllResources(ctx context.Context, namespacedName types.NamespacedNam
 
 	// Clean up child resources explicitly but don't wait for each one
 	pvcName := types.NamespacedName{Name: namespacedName.Name + "-data", Namespace: namespacedName.Namespace}
-	
+
 	// Delete all resources without waiting
 	_ = k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})
 	_ = k8sClient.Delete(ctx, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: namespacedName.Name, Namespace: namespacedName.Namespace}})

@@ -10,7 +10,7 @@ import (
 // apiCredentialsSecretForN8n creates a Secret resource for API credentials
 func (r *N8nReconciler) apiCredentialsSecretForN8n(n8n *n8nv1alpha1.N8n, apiKey string) (*corev1.Secret, error) {
 	secretName := getAPICredentialsSecretName(n8n.Name)
-	
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -27,10 +27,10 @@ func (r *N8nReconciler) apiCredentialsSecretForN8n(n8n *n8nv1alpha1.N8n, apiKey 
 			"apiKey": apiKey,
 		},
 	}
-	
+
 	if err := ctrl.SetControllerReference(n8n, secret, r.Scheme); err != nil {
 		return nil, err
 	}
-	
+
 	return secret, nil
 }
