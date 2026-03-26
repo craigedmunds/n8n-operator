@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -159,6 +160,12 @@ type N8nSpec struct {
 
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	Hostname *HostnameConfig `json:"hostname,omitempty"`
+
+	// Tolerations for the n8n pod. Useful when persistent storage is on a tainted node
+	// (e.g., a control-plane node using local-path provisioner).
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	// +listType=atomic
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // N8nStatus defines the observed state of N8n

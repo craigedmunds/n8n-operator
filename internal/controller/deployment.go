@@ -56,6 +56,7 @@ func (r *N8nReconciler) deploymentForN8n(n8n *n8nv1alpha1.N8n) (*appsv1.Deployme
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: getPodSecurityContext(),
+					Tolerations:     n8n.Spec.Tolerations,
 					Volumes:         volumes,
 					InitContainers: []corev1.Container{{
 						Name:            "init-permissions",
