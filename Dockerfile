@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:bookworm AS builder
+FROM public.ecr.aws/docker/library/golang:bookworm AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG N8N_VERSION
